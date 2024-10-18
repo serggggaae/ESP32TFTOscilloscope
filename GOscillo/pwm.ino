@@ -1,24 +1,23 @@
-#define LEDC_CHANNEL_0 0 //channel max 15
-#define GPIO_PIN 16 // should not assign GPIO #36 throough #39
+#define LEDC_CHANNEL_0 0  //channel max 15
+#define GPIO_PIN 16       // should not assign GPIO #36 throough #39
 
-byte duty = 128;      // duty ratio = duty/256
-byte p_range = 16;    // bit_num 1 - 16
-unsigned short count;   // rate 256/256 - 1/256
+byte duty = 128;       // duty ratio = duty/256
+byte p_range = 16;     // bit_num 1 - 16
+unsigned short count;  // rate 256/256 - 1/256
 
 double pulse_frq(void) {  // 4.768Hz <= pulse_frq <= 40MHz
-  return(80.0e6 / pow(2, p_range) * count / 256.0);
+  return (80.0e6 / pow(2, p_range) * count / 256.0);
 }
 
 void set_pulse_frq(float freq) {  // 4.768Hz <= freq <= 40MHz
   if (freq > 40e6) freq = 40e6;
-  p_range = constrain(int(log(80e6/freq)/log(2)), 1, 16);
+  p_range = constrain(int(log(80e6 / freq) / log(2)), 1, 16);
   count = round(256.0 / 80.0e6 * pow(2, p_range) * freq);
   ledcSetup(LEDC_CHANNEL_0, pulse_frq(), p_range);
   setduty();
 }
 
 void pulse_init() {
-  int divide;
   p_range = constrain(p_range, 1, 16);
   if (p_range < 16)
     count = constrain(count, 129, 256);
@@ -28,11 +27,11 @@ void pulse_init() {
   ledcSetup(LEDC_CHANNEL_0, pulse_frq(), p_range);
   ledcAttachPin(GPIO_PIN, LEDC_CHANNEL_0);
   setduty();
-//  ledcWrite(LEDC_CHANNEL_0, ((long)duty * (long)pow(2, p_range)) >> 8);
+  //  ledcWrite(LEDC_CHANNEL_0, ((long)duty * (long)pow(2, p_range)) >> 8);
 }
 
 void update_frq(int diff) {
-  int divide, fast;
+  int fast;
   long newCount;
 
   if (abs(diff) > 3) {
@@ -66,43 +65,44 @@ void update_frq(int diff) {
   ledcSetup(LEDC_CHANNEL_0, pulse_frq(), p_range);
   // set Duty ratio
   setduty();
-//  ledcWrite(LEDC_CHANNEL_0, ((long)duty * (long)pow(2, p_range)) >> 8);
+  //  ledcWrite(LEDC_CHANNEL_0, ((long)duty * (long)pow(2, p_range)) >> 8);
 }
 
 #ifndef NOLCD
 void disp_pulse_frq(void) {
-//  freq = ledcReadFreq(LEDC_CHANNEL_0);
+  //  freq = ledcReadFreq(LEDC_CHANNEL_0);
   double freq = pulse_frq();
-  if (freq < 10000000.0) {
-    display.print(" ");
-  }
-  if (freq < 10.0) {
+  if (freq < 10.0)
     display.print(freq, 5);
-  } else if (freq < 100.0) {
+  else if (freq < 100.0)
     display.print(freq, 4);
-  } else if (freq < 1000.0) {
+  else if (freq < 1000.0)
     display.print(freq, 3);
-  } else if (freq < 10000.0) {
-    display.print(freq, 2);
+  else if (freq < 10000.0) {
+    display.print(freq / 1000, 5);
+    display.print('k');
   } else if (freq < 100000.0) {
-    display.print(freq, 1);
+    display.print(freq / 1000, 4);
+    display.print('k');
   } else if (freq < 1000000.0) {
-    display.print(" ");
-    display.print(freq, 0);
+    display.print(freq / 1000, 3);
+    display.print('k');
   } else if (freq < 10000000.0) {
-    display.print(freq, 0);
+    display.print(freq / 1000000, 5);
+    display.print('m');
   } else {
-    display.print(freq, 0);
+    display.print(freq / 1000000, 4);
+    display.print('m');
   }
   display.print("Hz ");
-  if ((duty*100.0/256.0) < 9.95) {
+  if ((duty * 100.0 / 256.0) < 9.95) {
     display.print(" ");
   }
 }
-
 void disp_pulse_dty(void) {
-//  display.print(duty*100.0/256.0, 1); display.print('%');
-  display.print(duty*0.390625, 1); display.print("%  ");
+  //  display.print(duty*100.0/256.0, 1); display.print('%');
+  display.print(duty * 0.390625, 1);
+  display.print("%  ");
 }
 #endif
 
@@ -120,7 +120,7 @@ void pulse_close() {
 
 void setduty(void) {
   if (p_range == 1)
-    ledcWrite(LEDC_CHANNEL_0, 0);   // duty=1 will not work
+    ledcWrite(LEDC_CHANNEL_0, 0);  // duty=1 will not work
   else
     ledcWrite(LEDC_CHANNEL_0, ((long)duty * (long)pow(2, p_range)) >> 8);
 }

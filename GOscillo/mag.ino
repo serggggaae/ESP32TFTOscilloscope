@@ -15,14 +15,14 @@
 //                            0, -16, -23, -24, -20, -14, -8, -4, -1, 0};
 
 // Blackman windowed
-const int16_t sinc40[40] = {4096, 4019, 3793, 3437, 2977, 2447, 1886, 1330, 814, 364,
-                            0, -268, -440, -523, -531, -482, -395, -289, -180, -81,
-                            0, 58, 93, 106, 104, 90, 70, 48, 28, 11,
-                            0, -7, -10, -10, -8, -5, -3, -1, 0, 0};
+const int16_t sinc40[40] = { 4096, 4019, 3793, 3437, 2977, 2447, 1886, 1330, 814, 364,
+                             0, -268, -440, -523, -531, -482, -395, -289, -180, -81,
+                             0, 58, 93, 106, 104, 90, 70, 48, 28, 11,
+                             0, -7, -10, -10, -8, -5, -3, -1, 0, 0 };
 
 #define MAGSAMPL 4
-#define MAGSTART (MAGSAMPL-1)
-#define MAGFORWD (MAGSAMPL+1)
+#define MAGSTART (MAGSAMPL - 1)
+#define MAGFORWD (MAGSAMPL + 1)
 
 uint16_t magbuf[SAMPLES];
 
@@ -30,7 +30,7 @@ void mag(byte *d, int factor) {  // factor should be 2, 5, or 10
   int s, m, n;
   long sum;
   for (int i = 0; i < SAMPLES; i++) {
-    s = (i / factor) + MAGSTART;    // start sample
+    s = (i / factor) + MAGSTART;  // start sample
     m = i % factor;
     if (m == 0) {
       sum = d[s];
@@ -58,7 +58,7 @@ void mag(uint16_t *d, int factor) {  // factor should be 2, 5, or 10
   int s, m, n;
   long sum;
   for (int i = 0; i < SAMPLES; i++) {
-    s = (i / factor) + MAGSTART;    // start sample
+    s = (i / factor) + MAGSTART;  // start sample
     m = i % factor;
     if (m == 0) {
       sum = d[s];

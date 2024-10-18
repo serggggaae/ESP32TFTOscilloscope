@@ -1,26 +1,26 @@
 #include <WiFi.h>
 #include <WebServer.h>
-#include <WebSocketsServer.h> // arduinoWebSockets library
+#include <WebSocketsServer.h>  // arduinoWebSockets library
 #include <ESPmDNS.h>
 
 WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
 
 // WiFi information
-//#define WIFI_ACCESS_POINT
+#define WIFI_ACCESS_POINT
 #ifndef WIFI_ACCESS_POINT
-const char* ssid = "XXXX";
-const char* pass = "YYYY";
+const char *ssid = "Asus_home";
+const char *pass = "";
 #else
-const char* apssid = "ESP32OSCILLO";
-const char* password = "12345678";
+const char *apssid = "ESP32OSCILLO";
+const char *password = "12345678";
 const IPAddress ip(192, 168, 4, 1);
 const IPAddress subnet(255, 255, 255, 0);
 #endif
 
 // Initial Screen
 void handleRoot(void) {
-//  xTaskCreatePinnedToCore(index_html, "IndexProcess", 4096, NULL, 1, NULL, PRO_CPU_NUM); //Core 0でタスク開始
+  //  xTaskCreatePinnedToCore(index_html, "IndexProcess", 4096, NULL, 1, NULL, PRO_CPU_NUM); //Core 0でタスク開始
 
   if (server.method() == HTTP_POST) {
     Serial.println(server.argName(0));
@@ -43,7 +43,7 @@ void handleRoot(void) {
     handle_dds_freq();
     handle_pwm_duty();
     handle_pwm_freq();
-    saveTimer = 5000;     // set EEPROM save timer to 5 secnd
+    saveTimer = 5000;  // set EEPROM save timer to 5 secnd
     return;
   }
   index_html(NULL);
@@ -54,11 +54,11 @@ void handle_ch1_mode() {
   if (val != NULL) {
     Serial.println(val);
     if (val == "chon") {
-      ch0_mode = MODE_ON;       // CH1 ON
+      ch0_mode = MODE_ON;  // CH1 ON
     } else if (val == "chinv") {
-      ch0_mode = MODE_INV;      // CH1 INV
+      ch0_mode = MODE_INV;  // CH1 INV
     } else if (val == "choff") {
-      ch0_mode = MODE_OFF;      // CH1 OFF
+      ch0_mode = MODE_OFF;  // CH1 OFF
     }
     server.send(200, "text/html", "OK");  // response 200, send OK
   }
@@ -69,11 +69,11 @@ void handle_ch2_mode() {
   if (val != NULL) {
     Serial.println(val);
     if (val == "chon") {
-      ch1_mode = MODE_ON;       // CH2 ON
+      ch1_mode = MODE_ON;  // CH2 ON
     } else if (val == "chinv") {
-      ch1_mode = MODE_INV;      // CH2 INV
+      ch1_mode = MODE_INV;  // CH2 INV
     } else if (val == "choff") {
-      ch1_mode = MODE_OFF;      // CH2 OFF
+      ch1_mode = MODE_OFF;  // CH2 OFF
     }
     server.send(200, "text/html", "OK");  // response 200, send OK
   }
@@ -85,15 +85,15 @@ void handle_rate() {
     int nrate = rate;
     Serial.println(val);
     if (val == "1") {
-      wrate = 3;    // fast
+      wrate = 3;  // fast
       if (rate > RATE_MIN) nrate = rate - 1;
     } else if (val == "0") {
-      wrate = 7;    // slow
+      wrate = 7;  // slow
       if (rate < RATE_MAX) nrate = rate + 1;
     }
     String strrate;
     strrate = Rates[nrate];
-    server.send(200, "text/html", strrate+((nrate > RATE_DMA)?"":((nrate > RATE_MAG)?" DMA":" MAG")));  // response 200, send OK
+    server.send(200, "text/html", strrate + ((nrate > RATE_DMA) ? "" : ((nrate > RATE_MAG) ? " DMA" : " MAG")));  // response 200, send OK
   }
 }
 
@@ -107,7 +107,7 @@ void handle_range1() {
       updown_ch0range(7);  // range1 down
     }
     String ch1acdc;
-    if (digitalRead(CH0DCSW) == LOW)    // DC/AC input
+    if (digitalRead(CH0DCSW) == LOW)  // DC/AC input
       ch1acdc = "AC ";
     else
       ch1acdc = "DC ";
@@ -125,7 +125,7 @@ void handle_range2() {
       updown_ch1range(7);  // range2 down
     }
     String ch2acdc;
-    if (digitalRead(CH1DCSW) == LOW)    // DC/AC input
+    if (digitalRead(CH1DCSW) == LOW)  // DC/AC input
       ch2acdc = "AC ";
     else
       ch2acdc = "DC ";
@@ -205,7 +205,7 @@ void handle_ch_offset1() {
   if (server.hasArg("reset1")) {
     Serial.println("reset1");
     if (server.arg("reset1").equals("1")) {
-      if (digitalRead(CH0DCSW) == LOW)    // DC/AC input
+      if (digitalRead(CH0DCSW) == LOW)  // DC/AC input
         ch0_off = ac_offset[range0];
       else
         ch0_off = 0;
@@ -214,10 +214,10 @@ void handle_ch_offset1() {
   } else if (server.hasArg("offset1")) {
     String val = server.arg("offset1");
     if (val != NULL) {
-//      Serial.println(val);
+      //      Serial.println(val);
       long offset = val.toInt();
-      ch0_off = (4096 * offset)/VREF[range0];
-      if (digitalRead(CH0DCSW) == LOW)    // DC/AC input
+      ch0_off = (4096 * offset) / VREF[range0];
+      if (digitalRead(CH0DCSW) == LOW)  // DC/AC input
         ch0_off += ac_offset[range0];
     }
     server.send(200, "text/html", "OK");  // response 200, send OK
@@ -228,7 +228,7 @@ void handle_ch_offset2() {
   if (server.hasArg("reset2")) {
     Serial.println("reset2");
     if (server.arg("reset2").equals("2")) {
-      if (digitalRead(CH1DCSW) == LOW)    // DC/AC input
+      if (digitalRead(CH1DCSW) == LOW)  // DC/AC input
         ch1_off = ac_offset[range1];
       else
         ch1_off = 0;
@@ -237,10 +237,10 @@ void handle_ch_offset2() {
   } else if (server.hasArg("offset2")) {
     String val = server.arg("offset2");
     if (val != NULL) {
-//      Serial.println(val);
+      //      Serial.println(val);
       long offset = val.toInt();
-      ch1_off = (4096 * offset)/VREF[range1];
-      if (digitalRead(CH1DCSW) == LOW)    // DC/AC input
+      ch1_off = (4096 * offset) / VREF[range1];
+      if (digitalRead(CH1DCSW) == LOW)  // DC/AC input
         ch1_off += ac_offset[range1];
     }
     server.send(200, "text/html", "OK");  // response 200, send OK
@@ -302,7 +302,7 @@ void handle_dds_freq() {
   String val = server.arg("dfreq");
   if (val != NULL) {
     Serial.println(val);
-    server.send(200, "text/html", String(set_freq((float)val.toFloat()), 2)); // response 200, send OK
+    server.send(200, "text/html", String(set_freq((float)val.toFloat()), 2));  // response 200, send OK
   }
 }
 
@@ -312,7 +312,7 @@ void handle_pwm_duty() {
     Serial.println(val);
     duty = constrain(round(val.toFloat() * 2.56), 0, 255);
     setduty();
-    server.send(200, "text/html", String(duty*100.0/256.0, 1)); // response 200, send OK
+    server.send(200, "text/html", String(duty * 100.0 / 256.0, 1));  // response 200, send OK
   }
 }
 
@@ -321,14 +321,14 @@ void handle_pwm_freq() {
   if (val != NULL) {
     Serial.println(val);
     set_pulse_frq(val.toFloat());
-    server.send(200, "text/html", String(pulse_frq())); // response 200, send OK
+    server.send(200, "text/html", String(pulse_frq()));  // response 200, send OK
   }
 }
 
-void index_html(void * pvParameters) {
-String html;
+void index_html(void *pvParameters) {
+  String html;
 
-//<meta http-equiv="refresh" content="1; URL=">
+  //<meta http-equiv="refresh" content="1; URL=">
   html = R"=====(
 <!DOCTYPE html>
 <html>
@@ -780,28 +780,28 @@ Hz</label>
 )=====";
 
   String ch1acdc, ch2acdc;
-  if (digitalRead(CH0DCSW) == LOW)    // DC/AC input
+  if (digitalRead(CH0DCSW) == LOW)  // DC/AC input
     ch1acdc = "AC ";
   else
     ch1acdc = "DC ";
-  if (digitalRead(CH1DCSW) == LOW)    // DC/AC input
+  if (digitalRead(CH1DCSW) == LOW)  // DC/AC input
     ch2acdc = "AC ";
   else
     ch2acdc = "DC ";
 
   html.replace("%RATE%", Rates[rate]);
-  html.replace("%REALDMA%", (rate > RATE_DMA)?"":((rate > RATE_MAG)?"DMA":"MAG"));
+  html.replace("%REALDMA%", (rate > RATE_DMA) ? "" : ((rate > RATE_MAG) ? "DMA" : "MAG"));
   html.replace("%RANGE1%", ch1acdc + Ranges[range0]);
   html.replace("%RANGE2%", ch2acdc + Ranges[range1]);
-  html.replace("%TRIGCH%", trig_ch==ad_ch0?"ch1":"ch2");
+  html.replace("%TRIGCH%", trig_ch == ad_ch0 ? "ch1" : "ch2");
   html.replace("%WAVEFORM1%", Modes[ch0_mode]);
   html.replace("%WAVEFORM2%", Modes[ch1_mode]);
-  html.replace("%TRIGEDGE%", trig_edge==TRIG_E_DN?"down":"up");
+  html.replace("%TRIGEDGE%", trig_edge == TRIG_E_DN ? "down" : "up");
   html.replace("%TRIGGLEVEL%", String(trig_lv));
-  html.replace("%WAVEFFT%", fft_mode?"fft":"wave");
-  html.replace("%RUNHOLD%", Start?"run":"hold");
-  html.replace("%PULSEONOFF%", pulse_mode?"on":"off");
-  html.replace("%DDSONOFF%", dds_mode?"on":"off");
+  html.replace("%WAVEFFT%", fft_mode ? "fft" : "wave");
+  html.replace("%RUNHOLD%", Start ? "run" : "hold");
+  html.replace("%PULSEONOFF%", pulse_mode ? "on" : "off");
+  html.replace("%DDSONOFF%", dds_mode ? "on" : "off");
   html.replace("%DDSFREQ%", String(dds_freq()));
   if (ch0_mode == MODE_ON) {
     html.replace("%CH1MODE%", "chon");
@@ -819,19 +819,19 @@ Hz</label>
   }
   html.replace("%CH1OFFSET%", String((ch0_off * VREF[range0]) / 4096));
   html.replace("%CH2OFFSET%", String((ch1_off * VREF[range1]) / 4096));
-  html.replace("%PULSEDUTY%", String(duty*100.0/256.0, 1));
+  html.replace("%PULSEDUTY%", String(duty * 100.0 / 256.0, 1));
   html.replace("%PULSEFREQ%", String(pulse_frq()));
 
   // send the HTML
   server.send(200, "text/html", html);
-//  vTaskDelete(NULL);
+  //  vTaskDelete(NULL);
 }
 
 void handleNotFound(void) {
   server.send(404, "text/plain", "Not Found.");
 }
 
-void setup1(void * pvParameters) {
+void setup1(void *pvParameters) {
   Serial.begin(115200);
 //  Serial.printf("CORE0 = %d\n", xPortGetCoreID());
 #ifdef WIFI_ACCESS_POINT
@@ -842,16 +842,17 @@ void setup1(void * pvParameters) {
   WiFi.softAPConfig(ip, ip, subnet);
   IPAddress myIP = WiFi.softAPIP();
 #else
-// Connect to the WiFi access point
+  // Connect to the WiFi access point
   WiFi.begin(ssid, pass);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
   }
 #endif
   // print out the IP address of the ESP32
-  Serial.print("WiFi Connected. IP = "); Serial.println(WiFi.localIP());
-//  Serial.print("WiFi Connected. GW = "); Serial.println(WiFi.gatewayIP());
-//  Serial.print("WiFi Connected. DNS = "); Serial.println(WiFi.dnsIP());
+  Serial.print("WiFi Connected. IP = ");
+  Serial.println(WiFi.localIP());
+  //  Serial.print("WiFi Connected. GW = "); Serial.println(WiFi.gatewayIP());
+  //  Serial.print("WiFi Connected. DNS = "); Serial.println(WiFi.dnsIP());
 
   if (MDNS.begin("esp32oscillo")) {
     Serial.println("MDNS responder started");
@@ -865,17 +866,17 @@ void setup1(void * pvParameters) {
     server.handleClient();
     if (xTaskNotifyWait(0, 0, NULL, pdMS_TO_TICKS(0)) == pdTRUE) {
       if (rate < RATE_ROLL && fft_mode) {
-        payload[FFT_N/2+2] = (short) ((long)(100.0*waveFreq[0]) / 10000);
-        payload[FFT_N/2+3] = (short) ((long)(100.0*waveFreq[0]) % 10000);
-        webSocket.broadcastBIN((byte *) payload, FFT_N + 8);
+        payload[FFT_N / 2 + 2] = (short)((long)(100.0 * waveFreq[0]) / 10000);
+        payload[FFT_N / 2 + 3] = (short)((long)(100.0 * waveFreq[0]) % 10000);
+        webSocket.broadcastBIN((byte *)payload, FFT_N + 8);
       } else if (rate >= RATE_DUAL || (ch0_mode == MODE_OFF && ch1_mode != MODE_OFF)) {
-        payload[SAMPLES*2] = (short) ((long)(100.0*waveFreq[0]) / 10000);
-        payload[SAMPLES*2+1] = (short) ((long)(100.0*waveFreq[0]) % 10000);
-        webSocket.broadcastBIN((byte *) payload, SAMPLES * 4 + 4);
+        payload[SAMPLES * 2] = (short)((long)(100.0 * waveFreq[0]) / 10000);
+        payload[SAMPLES * 2 + 1] = (short)((long)(100.0 * waveFreq[0]) % 10000);
+        webSocket.broadcastBIN((byte *)payload, SAMPLES * 4 + 4);
       } else {
-        payload[SAMPLES] = (short) ((long)(100.0*waveFreq[0]) / 10000);
-        payload[SAMPLES+1] = (short) ((long)(100.0*waveFreq[0]) % 10000);
-        webSocket.broadcastBIN((byte *) payload, SAMPLES * 2 + 4);
+        payload[SAMPLES] = (short)((long)(100.0 * waveFreq[0]) / 10000);
+        payload[SAMPLES + 1] = (short)((long)(100.0 * waveFreq[0]) % 10000);
+        webSocket.broadcastBIN((byte *)payload, SAMPLES * 2 + 4);
       }
     }
     webSocket.loop();

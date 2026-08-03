@@ -1,4 +1,6 @@
+#ifndef NOWEB
 #include <WiFi.h>
+#include <FS.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>  // arduinoWebSockets library
 #include <ESPmDNS.h>
@@ -23,7 +25,7 @@ void handleRoot(void) {
   //  xTaskCreatePinnedToCore(index_html, "IndexProcess", 4096, NULL, 1, NULL, PRO_CPU_NUM); //Core 0でタスク開始
 
   if (server.method() == HTTP_POST) {
-    Serial.println(server.argName(0));
+    // Serial.println(server.argName(0));
     handle_rate();
     handle_range1();
     handle_range2();
@@ -43,7 +45,7 @@ void handleRoot(void) {
     handle_dds_freq();
     handle_pwm_duty();
     handle_pwm_freq();
-    saveTimer = 5000;  // set EEPROM save timer to 5 secnd
+    saveTimer = 5000;  // set EEPROM save timer to 5 second
     return;
   }
   index_html(NULL);
@@ -67,7 +69,7 @@ void handle_ch1_mode() {
 void handle_ch2_mode() {
   String val = server.arg("ch2_mode");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "chon") {
       ch1_mode = MODE_ON;  // CH2 ON
     } else if (val == "chinv") {
@@ -83,7 +85,7 @@ void handle_rate() {
   String val = server.arg("rate");
   if (val != NULL) {
     int nrate = rate;
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "1") {
       wrate = 3;  // fast
       if (rate > RATE_MIN) nrate = rate - 1;
@@ -100,7 +102,7 @@ void handle_rate() {
 void handle_range1() {
   String val = server.arg("range1");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "1") {
       updown_ch0range(3);  // range1 up
     } else if (val == "0") {
@@ -118,7 +120,7 @@ void handle_range1() {
 void handle_range2() {
   String val = server.arg("range2");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "1") {
       updown_ch1range(3);  // range2 up
     } else if (val == "0") {
@@ -136,7 +138,7 @@ void handle_range2() {
 void handle_trigger_mode() {
   String val = server.arg("trigger_mode");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "0") {
       trig_mode = 0;  // Auto
     } else if (val == "1") {
@@ -155,7 +157,7 @@ void handle_trigger_mode() {
 void handle_trig_ch() {
   String val = server.arg("trig_ch");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "ch1") {
       trig_ch = ad_ch0;
     } else if (val == "ch2") {
@@ -168,7 +170,7 @@ void handle_trig_ch() {
 void handle_trig_edge() {
   String val = server.arg("trig_edge");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "down") {
       trig_edge = TRIG_E_DN;  // trigger fall
     } else if (val == "up") {
@@ -181,7 +183,7 @@ void handle_trig_edge() {
 void handle_trig_level() {
   String val = server.arg("trig_lvl");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     trig_lv = val.toInt();
     set_trigger_ad();
     server.send(200, "text/html", "OK");  // response 200, send OK
@@ -191,11 +193,11 @@ void handle_trig_level() {
 void handle_run_hold() {
   String val = server.arg("run_hold");
   if (val == "run") {
-    Serial.println(val);
+    // Serial.println(val);
     Start = true;
     server.send(200, "text/html", "OK");  // response 200, send OK
   } else if (val == "hold") {
-    Serial.println(val);
+    // Serial.println(val);
     Start = false;
     server.send(200, "text/html", "OK");  // response 200, send OK
   }
@@ -203,7 +205,7 @@ void handle_run_hold() {
 
 void handle_ch_offset1() {
   if (server.hasArg("reset1")) {
-    Serial.println("reset1");
+    // Serial.println("reset1");
     if (server.arg("reset1").equals("1")) {
       if (digitalRead(CH0DCSW) == LOW)  // DC/AC input
         ch0_off = ac_offset[range0];
@@ -226,7 +228,7 @@ void handle_ch_offset1() {
 
 void handle_ch_offset2() {
   if (server.hasArg("reset2")) {
-    Serial.println("reset2");
+    // Serial.println("reset2");
     if (server.arg("reset2").equals("2")) {
       if (digitalRead(CH1DCSW) == LOW)  // DC/AC input
         ch1_off = ac_offset[range1];
@@ -250,7 +252,7 @@ void handle_ch_offset2() {
 void handle_wave_fft() {
   String val = server.arg("wavefft");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "wave") {
       wfft = false;
     } else if (val == "fft") {
@@ -263,7 +265,7 @@ void handle_wave_fft() {
 void handle_pwm_onoff() {
   String val = server.arg("pwm_on");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "on") {
       update_frq(0);
       pulse_start();
@@ -279,7 +281,7 @@ void handle_pwm_onoff() {
 void handle_dds_onoff() {
   String val = server.arg("dds_on");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     if (val == "on") {
       wdds = true;
     } else if (val == "off") {
@@ -292,7 +294,7 @@ void handle_dds_onoff() {
 void handle_wave_select() {
   String val = server.arg("wave_select");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     server.send(200, "text/html", "OK");  // response 200, send OK
     set_wave(val.toInt());
   }
@@ -301,7 +303,7 @@ void handle_wave_select() {
 void handle_dds_freq() {
   String val = server.arg("dfreq");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     server.send(200, "text/html", String(set_freq((float)val.toFloat()), 2));  // response 200, send OK
   }
 }
@@ -309,7 +311,7 @@ void handle_dds_freq() {
 void handle_pwm_duty() {
   String val = server.arg("duty");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     duty = constrain(round(val.toFloat() * 2.56), 0, 255);
     setduty();
     server.send(200, "text/html", String(duty * 100.0 / 256.0, 1));  // response 200, send OK
@@ -319,7 +321,7 @@ void handle_pwm_duty() {
 void handle_pwm_freq() {
   String val = server.arg("wfreq");
   if (val != NULL) {
-    Serial.println(val);
+    // Serial.println(val);
     set_pulse_frq(val.toFloat());
     server.send(200, "text/html", String(pulse_frq()));  // response 200, send OK
   }
@@ -880,6 +882,7 @@ void setup1(void *pvParameters) {
       }
     }
     webSocket.loop();
-    delay(1);
+    vTaskDelay(1);
   }
 }
+#endif

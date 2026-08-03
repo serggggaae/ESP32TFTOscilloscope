@@ -42,7 +42,7 @@ volatile unsigned char wavebuf[256];
 hw_timer_t *timer = NULL;
 
 void dds_setup_init() {
-  dac_output_enable(DAC_CHANNEL_1);
+  dac_output_enable(DAC_CHAN_0);
   if (dac_cw_mode)
     cw_dds_setup();
   else
@@ -61,7 +61,8 @@ void pwm_dds_setup() {
     wp = (unsigned char *)wavetable[wave_id];
     memcpy((void *)wavebuf, wp, 256);
   }
-  timerAlarmEnable(timer);
+  //  timerAttachInterrupt(timer, &onTimer);
+  timerStart(timer);
 }
 
 void dds_close() {
@@ -71,7 +72,7 @@ void dds_close() {
   } else {
     Close_timer();
   }
-  dac_output_disable(DAC_CHANNEL_1);
+  dac_output_disable(DAC_CHAN_0);
 }
 
 void dds_set_freq() {
@@ -106,24 +107,23 @@ void IRAM_ATTR onTimer() {
   phaccu = phaccu + tword_m;  // soft DDS, phase accu with 32 bits
   icnt = phaccu >> 24;        // use upper 8 bits for phase accu as frequency information
                               // read value fron ROM sine table and send to PWM DAC
-  dac_output_voltage(DAC_CHANNEL_1, wavebuf[icnt]);
-  //  dac_output_voltage(DAC_CHANNEL_1, wp[icnt]);
+  dac_output_voltage(DAC_CHAN_0, wavebuf[icnt]);
+  //  dac_output_voltage(DAC_CHAN_0, wp[icnt]);
 }
 
 //******************************************************************
 // timer setup
 // 80000000/1000000*200 = 5.00 kHz clock
 void Setup_timer() {
-  timer = timerBegin(3, getApbFrequency() / 1000000 * 200, true);
-  timerAttachInterrupt(timer, &onTimer, true);
-  timerAlarmWrite(timer, 1, true);
-  timerAlarmEnable(timer);
+  timer = timerBegin(5000);
+  timerAttachInterrupt(timer, &onTimer);
+  timerAlarm(timer, 1, true, 0);
 }
 
 void Close_timer() {
-  timerAlarmDisable(timer);
-  //  timerEnd(timer);
-  //  timer = NULL;
+  timerDetachInterrupt(timer);
+  timerEnd(timer);
+  timer = NULL;
 }
 
 void update_ifrq(long diff) {
@@ -232,6 +232,7 @@ void disp_dds_freq(void) {
   }
   display.print("Hz");
 }
+
 void disp_dds_wave(void) {
   display.print(Wavename[wave_id]);
 }
@@ -240,7 +241,7 @@ void disp_dds_wave(void) {
 void cw_dds_setup() {
   dac_cw_generator_enable();
   dac_cw_config_t cw = {
-    .en_ch = DAC_CHANNEL_1,
+    .en_ch = DAC_CHAN_0,
     .scale = DAC_CW_SCALE_1,  // DAC_CW_SCALE_2:1/2 DAC_CW_SCALE_4:1/4 DAC_CW_SCALE_8:1/8
     .phase = DAC_CW_PHASE_0,  // DAC_CW_PHASE_0:0degree DAC_CW_PHASE_180:+180degree
     .freq = (uint32_t)130,    // 130(130Hz) ~ 65537(65.537kHz why uint32?)

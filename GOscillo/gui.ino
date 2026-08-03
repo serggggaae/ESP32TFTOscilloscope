@@ -47,27 +47,29 @@ void CheckTouch() {
     analogWrite(LED_BUILTIN, brightness);
     return;
   }
-  if ((x > 130 && x < 190) && (y < 90 && y > 22)) {
-    orate = rate;
-    if (rate > 0) {
-      rate--;
-      res2();
-      rate_i2s_mode_config();
+  if (time_mag == 1) {
+    if ((x > 130 && x < 190) && (y < 90 && y > 22)) {
+      orate = rate;
+      if (rate > 0) {
+        rate--;
+        res2();
+        rate_i2s_mode_config();
+      }
+      display.fillScreen(BGCOLOR);
+      return;
+    } else if ((x > 130 && x < 190) && (150 < y && y < 218)) {
+      orate = rate;
+      if (rate < RATE_MAX) {
+        rate++;
+        res2();
+        rate_i2s_mode_config();
+      } else {
+        rate = RATE_MAX;
+        res2();
+      }
+      display.fillScreen(BGCOLOR);
+      return;
     }
-    display.fillScreen(BGCOLOR);
-    return;
-  } else if ((x > 130 && x < 190) && (150 < y && y < 218)) {
-    orate = rate;
-    if (rate < RATE_MAX) {
-      rate++;
-      res2();
-      rate_i2s_mode_config();
-    } else {
-      rate = RATE_MAX;
-      res2();
-    }
-    display.fillScreen(BGCOLOR);
-    return;
   }
   if (y < 20) {
     if (x < 60) {  // CH1 mode
@@ -83,7 +85,24 @@ void CheckTouch() {
     } else if (x < 130) {  // CH1 voltage range
       item = (item != SEL_RANGE1) ? SEL_RANGE1 : SEL_NONE;
     } else if (x < 175) {  // Rate
-      item = (item != SEL_RATE) ? SEL_RATE : SEL_NONE;
+      if (item != SEL_RATE) {
+        item = SEL_RATE;
+      } else {
+        switch (time_mag) {
+          case 1:
+            time_mag = 2;
+            break;
+          case 2:
+            time_mag = 5;
+            break;
+          case 5:
+            time_mag = 10;
+            break;
+          default:
+            time_mag = 1;
+            break;
+        }
+      }
     } else if (x < 240) {  // Vertical position
       if (item != SEL_OFST1 && item != SEL_OFST2)
         item = SEL_OFST1;
@@ -101,12 +120,26 @@ void CheckTouch() {
     else
       low_touch_func(x);
   } else if ((y > 30 && y < 210) & (x < (LCD_WIDTH - 35))) {  // avoid conflict with trigger level
+    if (y < LCD_HEIGHT / 2) {
+      if (x < (LCD_WIDTH / 2)) {  // minus
+        clear_text();
+        decrement_item();  // slow
+      } else {             // plus
+        clear_text();
+        increment_item();  // fast
+      }
+    }
     switch (item) {
       case SEL_RATE:
-        if (x < (LCD_WIDTH / 2)) {  // minus
-          updown_rate(7);           // slow
-        } else {                    // plus
-          updown_rate(3);           // fast
+        if (time_mag < 2 || rate <= RATE_MAG) {
+          if (x < (LCD_WIDTH / 2)) {  // minus
+            updown_rate(7);           // slow
+          } else {                    // plus
+            updown_rate(3);           // fast
+          }
+        } else {
+          mag_pos = map(x, XOFF, LCD_WIDTH - 35, 0, SAMPLES - SAMPLES / time_mag);
+          mag_pos = constrain(mag_pos, 0, SAMPLES - SAMPLES / time_mag - 5);
         }
         break;
       case SEL_RANGE1:
@@ -155,7 +188,8 @@ void CheckTouch() {
         update_ifrq(touch_diff(x));
         break;
       case SEL_NONE:
-        Start = !Start;  // halt
+        if (y > LCD_HEIGHT / 2)
+          Start = !Start;  // halt
         break;
       case SEL_PWMFREQ:
         update_frq(-touch_diff(x));
@@ -176,7 +210,7 @@ void CheckTouch() {
     trig_lv = YOFF + LCD_YMAX - y;
     set_trigger_ad();
   }
-  saveTimer = 5000;  // set EEPROM save timer to 5 secnd
+  saveTimer = 5000;  // set EEPROM save timer to 5 second
 }
 #endif
 
@@ -289,10 +323,12 @@ void low_touch_func(uint16_t x) {
     } else if (x < 120) {       // ON/OFF
       if (dds_mode == false) {  // turn on
         dds_setup();
-        dds_mode = wdds = true;
+        wdds = true;  // Было: dds_mode = wdds = true;
+        dds_mode = true;
       } else {  // turn off
         dds_close();
-        dds_mode = wdds = false;
+        wdds = false;  // Было: dds_mode = wdds = false;
+        dds_mode = false;
       }
     } else if (x < 180) {  // WAVE
       item = SEL_DDSWAVE;
@@ -389,7 +425,46 @@ void disp_trig_mode() {
   display.print(' ');
 }
 
-void TextBG(byte* y, int x, byte chrs) {
+void DrawText() {
+  if (info_mode & INFO_OFF)
+    return;
+  if (info_mode & INFO_BIG) {
+    display.setTextSize(2);  // Big
+  } else {
+    display.setTextSize(1);  // Small
+  }
+
+  //  if (info_mode && Start) {
+  if (info_mode & (INFO_FRQ1 | INFO_VOL1)) {
+    dataAnalize(0);
+    if (info_mode & INFO_FRQ1)
+      measure_frequency(0);
+    if (info_mode & INFO_VOL1)
+      measure_voltage(0);
+  }
+  if (info_mode & (INFO_FRQ2 | INFO_VOL2)) {
+    dataAnalize(1);
+    if (info_mode & INFO_FRQ2)
+      measure_frequency(1);
+    if (info_mode & INFO_VOL2)
+      measure_voltage(1);
+  }
+  DrawText_big();
+  if (!fft_mode)
+    draw_trig_level((trig_ch == ad_ch0) ? CH1COLOR : CH2COLOR);  // draw trig_lv mark
+}
+
+void draw_trig_level(int color) {  // draw trig_lv mark
+  int x, y;
+
+  x = XOFF + DISPLNG + 1;
+  y = YOFF + LCD_YMAX - trig_lv;
+  display.drawLine(x, y, x + 8, y + 4, color);
+  display.drawLine(x + 8, y + 4, x + 8, y - 4, color);
+  display.drawLine(x + 8, y - 4, x, y, color);
+}
+
+void TextBG(byte *y, int x, byte chrs) {
   int yinc, wid, hi;
   if (info_mode & INFO_BIG) {
     yinc = 20, wid = 12, hi = 16;
@@ -436,38 +511,47 @@ void DrawText_big() {
     set_menu_color(SEL_TGLVL);
     display.print("TGLV");
   } else {
-    display.setTextColor(OFFCOLOR, BGCOLOR);
-    if (rate > RATE_DMA) {
-      //float vbatt = adc1_get_raw((adc1_channel_t)ad_ch2) * 0.0012173124;
-      //vbatt = analogRead(ad_ch2) * 3.3 / 4095.0 / 0.662;
-      //int proc = ((vbatt - 2.75) / (4.25 - 2.75)) * 100;
-      //vbatt = adc1_get_raw((adc1_channel_t)dbatt) * 0.0012173124;
-      total = total - readings[readIndex];
-      readings[readIndex] = (adc1_get_raw((adc1_channel_t)volts) * 0.001217 - 2.8) / 0.0125;
-      total = total + readings[readIndex];
-      readIndex = readIndex + 1;
-      if (readIndex >= numReadings) {
-        readIndex = 0;
+    if (time_mag == 2) {
+      display.print("x2 ");
+    } else if (time_mag == 5) {
+      display.print("x5 ");
+    } else if (time_mag == 10) {
+      display.print("x10");
+    }
+    if (item != SEL_TGLVL || item != SEL_OFST1 || item != SEL_OFST2) {
+      display.setTextColor(OFFCOLOR, BGCOLOR);
+      if (rate > RATE_DMA) {
+        //float vbatt = adc1_get_raw((adc1_channel_t)ad_ch2) * 0.0012173124;
+        //vbatt = analogRead(ad_ch2) * 3.3 / 4095.0 / 0.662;
+        //int proc = ((vbatt - 2.75) / (4.25 - 2.75)) * 100;
+        //vbatt = adc1_get_raw((adc1_channel_t)dbatt) * 0.0012173124;
+        total = total - readings[readIndex];
+        readings[readIndex] = (adc1_get_raw((adc1_channel_t)volts) * 0.001217 - 2.8) / 0.0125;
+        total = total + readings[readIndex];
+        readIndex = readIndex + 1;
+        if (readIndex >= numReadings) {
+          readIndex = 0;
+        }
+        proc = total / numReadings;
+        volt = 2.8 + proc * 0.0125;
+        if (proc <= -10)
+          esp_deep_sleep_start();
+        else if (proc <= 10)
+          display.setTextColor(REDCOLOR, BGCOLOR);
+        else if (proc <= 20)
+          display.setTextColor(CH2COLOR, BGCOLOR);
+        if (time_mag == 1) display.print("BAT");
+        display.print(proc);
+        display.print('%');
+      } else {
+        if (proc <= 10)
+          display.setTextColor(REDCOLOR, BGCOLOR);
+        else if (proc <= 20)
+          display.setTextColor(CH2COLOR, BGCOLOR);
+        if (time_mag == 1) display.print("BAT");
+        display.print(volt);
+        display.print('V');
       }
-      proc = total / numReadings;
-      volt = 2.8 + proc * 0.0125;
-      if (proc <= -10)
-        esp_deep_sleep_start();
-      else if (proc <= 10)
-        display.setTextColor(REDCOLOR, BGCOLOR);
-      else if (proc <= 20)
-        display.setTextColor(CH2COLOR, BGCOLOR);
-      display.print("BAT");
-      display.print(proc);
-      display.print('%');
-    } else {
-      if (proc <= 10)
-        display.setTextColor(REDCOLOR, BGCOLOR);
-      else if (proc <= 20)
-        display.setTextColor(CH2COLOR, BGCOLOR);
-      display.print("BAT");
-      display.print(volt);
-      display.print('V');
     }
   }
   display.setCursor(252, 1);  // Function
@@ -477,6 +561,11 @@ void DrawText_big() {
     display.print("HALT");
   } else {
     display.print("FUNC");
+  }
+
+  if (time_mag > 1) {
+    display.setTextSize(1);
+    y = BOTTOM_LINE + 7;
   }
 
   if (item >= SEL_DISP) {
@@ -612,7 +701,7 @@ void CheckSW() {
   if (wrate != 0) {
     updown_rate(wrate);
     wrate = 0;
-    saveTimer = 5000;  // set EEPROM save timer to 5 secnd
+    saveTimer = 5000;  // set EEPROM save timer to 5 second
   }
 
 #ifndef NOLCD
@@ -641,7 +730,7 @@ void CheckSW() {
   }
   if (sw != lastsw)
     vtime = ms;
-  saveTimer = 5000;  // set EEPROM save timer to 5 secnd
+  saveTimer = 5000;  // set EEPROM save timer to 5 second
   menu_sw(sw);
   DrawText();
   //  display.display();
@@ -658,8 +747,10 @@ void CheckSW() {
       range0 = 4;
     else if (vn0 < 0.2)
       range0 = 3;
-    else if (vn0 < 0.419)
+    else if (vn0 < 0.5)
       range0 = 2;
+    else if (vn0 < 1)
+      range0 = 1;
     else range0 = 0;
     if (vn1 < 0.05)
       range1 = 5;
@@ -667,8 +758,10 @@ void CheckSW() {
       range1 = 4;
     else if (vn1 < 0.2)
       range1 = 3;
-    else if (vn1 < 0.419)
+    else if (vn1 < 0.5)
       range1 = 2;
+    else if (vn1 < 1)
+      range1 = 1;
     else range1 = 0;
     res();
   }
@@ -747,8 +840,10 @@ void opt() {
     range0 = 4;
   else if (vn0 < 0.2)
     range0 = 3;
-  else if (vn0 < 0.419)
+  else if (vn0 < 0.5)
     range0 = 2;
+  else if (vn0 < 1)
+    range0 = 1;
   else range0 = 0;
   if (vn1 < 0.05)
     range1 = 5;
@@ -756,8 +851,10 @@ void opt() {
     range1 = 4;
   else if (vn1 < 0.2)
     range1 = 3;
-  else if (vn1 < 0.419)
+  else if (vn1 < 0.5)
     range1 = 2;
+  else if (vn1 < 1)
+    range1 = 1;
   else range1 = 0;
   res();
   display.fillScreen(BGCOLOR);
@@ -1087,33 +1184,27 @@ void menu_sw(byte sw) {
     case SEL_DDS:             // DDS
       if (sw == BTN_RIGHT) {  // +
         dds_setup();
-        dds_mode = wdds = true;
+        wdds = true;  // Было: dds_mode = wdds = true;
+        dds_mode = true;
       } else if (sw == BTN_LEFT) {  // -
         dds_close();
-        dds_mode = wdds = false;
+        wdds = false;  // Было: dds_mode = wdds = false;
+        dds_mode = false;
       }
       break;
     case SEL_DDSWAVE:         // WAVE
       if (sw == BTN_RIGHT) {  // +
         rotate_wave(true);
-        dds_setup();
-        dds_mode = wdds = true;
       } else if (sw == BTN_LEFT) {  // -
         rotate_wave(false);
-        dds_setup();
-        dds_mode = wdds = true;
       }
       break;
     case SEL_DDSFREQ:  // FREQ
       diff = sw_accel(sw);
       if (sw == BTN_RIGHT) {  // +
         update_ifrq(diff);
-        dds_setup();
-        dds_mode = wdds = true;
       } else if (sw == BTN_LEFT) {  // -
         update_ifrq(-diff);
-        dds_setup();
-        dds_mode = wdds = true;
       }
       break;
     case SEL_DISPFRQ:         // Frequency and Duty display
@@ -1134,29 +1225,33 @@ void menu_sw(byte sw) {
         display.fillScreen(BGCOLOR);  // clear big text area
       }
       break;
-    case SEL_DISPLRG:         // Large Font
-      if (sw == BTN_RIGHT) {  // ON
-        brightness += 10;
-        info_mode |= INFO_BIG;
-        display.fillScreen(BGCOLOR);  // clear big text area
-      } else if (sw == BTN_LEFT) {    // OFF
-        brightness -= 10;
-        clear_big_text();
+    case SEL_DISPLRG:  // Large Font
+      if (time_mag == 1) {
+        if (sw == BTN_RIGHT) {  // ON
+          brightness += 10;
+          info_mode |= INFO_BIG;
+          display.fillScreen(BGCOLOR);  // clear big text area
+        } else if (sw == BTN_LEFT) {    // OFF
+          brightness -= 10;
+          clear_big_text();
+        }
+        brightness = constrain(brightness, 5, 255);  // Эта функция контролирует, что бы переменная brightness не стала больше 254 и меньше 0, если значение вылазит за границу то функция 0 или 254
+        analogWrite(LED_BUILTIN, brightness);
       }
-      brightness = constrain(brightness, 5, 255);  // Эта функция контролирует, что бы переменная brightness не стала больше 254 и меньше 0, если значение вылазит за границу то функция 0 или 254
-      analogWrite(LED_BUILTIN, brightness);
       break;
-    case SEL_DISPSML:         // Small Font
-      if (sw == BTN_RIGHT) {  // ON
-        brightness += 10;
-        info_mode &= ~INFO_BIG;
-        display.fillScreen(BGCOLOR);
-      } else if (sw == BTN_LEFT) {  // OFF
-        brightness -= 10;
-        clear_text();  // clear big text area
+    case SEL_DISPSML:  // Small Font
+      if (time_mag == 1) {
+        if (sw == BTN_RIGHT) {  // ON
+          brightness += 10;
+          info_mode &= ~INFO_BIG;
+          display.fillScreen(BGCOLOR);
+        } else if (sw == BTN_LEFT) {  // OFF
+          brightness -= 10;
+          clear_text();  // clear big text area
+        }
+        brightness = constrain(brightness, 5, 255);  // Эта функция контролирует, что бы переменная brightness не стала больше 254 и меньше 0, если значение вылазит за границу то функция 0 или 254
+        analogWrite(LED_BUILTIN, brightness);
       }
-      brightness = constrain(brightness, 5, 255);  // Эта функция контролирует, что бы переменная brightness не стала больше 254 и меньше 0, если значение вылазит за границу то функция 0 или 254
-      analogWrite(LED_BUILTIN, brightness);
       break;
     case SEL_DISPOFF:         // Text Display Off
       if (sw == BTN_RIGHT) {  // OFF
@@ -1222,5 +1317,21 @@ byte sw_accel(byte sw) {
     else if (curtime - vtime > 2000) diff = 2;
   }
   return (diff);
+}
+
+void mag_bar(void) {
+  if (time_mag > 1) {
+    int bar = SAMPLES / time_mag;
+    int x1 = XOFF;
+    int x2 = x1 + mag_pos;
+    int x3 = x2 + bar;
+    int y = YOFF + LCD_YMAX + 5;
+    display.fillRect(x1, y - 3, mag_pos, 7, BGCOLOR);
+    display.fillRect(x3, y - 3, SAMPLES - mag_pos - bar, 7, BGCOLOR);
+    display.drawFastHLine(XOFF, y, SAMPLES, MAGCOLOR);
+    display.fillRect(x2, y - 3, bar, 7, MAGCOLOR);
+  } else if ((info_mode & INFO_BIG) == 0) {
+    // display.fillRect(XOFF, YOFF + LCD_YMAX + 2, SAMPLES, 7, BGCOLOR);
+  }
 }
 #endif

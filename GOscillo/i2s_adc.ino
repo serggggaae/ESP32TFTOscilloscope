@@ -85,7 +85,7 @@ void rate_i2s_mode_config(void) {
     i2s_adc_disable(I2S_NUM);
     i2s_driver_uninstall(I2S_NUM);  //stop & destroy i2s driver
     if (dds_mode)
-      dac_output_enable(DAC_CHANNEL_1);  // fix the problem why?
+      dac_output_enable(DAC_CHAN_0);  // fix the problem why?
   }
   if (rate <= RATE_DMA) {
     i2s_set_sample_rates(I2S_NUM, sample_rate[rate]);

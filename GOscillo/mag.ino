@@ -3,7 +3,7 @@
    Copyright (c) 2024, Siliconvalley4066
 */
 
-// line intarpolation
+// line interpolation
 //const int16_t line40[40] = {4096, 3686, 3277, 2867, 2458, 2048, 1638, 1229, 819, 410,
 //                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 //                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -26,11 +26,11 @@ const int16_t sinc40[40] = { 4096, 4019, 3793, 3437, 2977, 2447, 1886, 1330, 814
 
 uint16_t magbuf[SAMPLES];
 
-void mag(byte *d, int factor) {  // factor should be 2, 5, or 10
+void mag(byte *d, int factor, int pos) {  // factor should be 2, 5, or 10
   int s, m, n;
   long sum;
   for (int i = 0; i < SAMPLES; i++) {
-    s = (i / factor) + MAGSTART;  // start sample
+    s = (i / factor) + MAGSTART + pos;  // start sample
     m = i % factor;
     if (m == 0) {
       sum = d[s];
@@ -43,7 +43,7 @@ void mag(byte *d, int factor) {  // factor should be 2, 5, or 10
       for (n = 1; n < MAGFORWD; n++) {
         sum += d[s + n] * sinc40[10 * n - m];
       }
-      sum /= 4096;
+      sum >>= 12;
     }
     if (sum > LCD_YMAX) sum = LCD_YMAX;
     else if (sum < 0) sum = 0;
@@ -54,11 +54,11 @@ void mag(byte *d, int factor) {  // factor should be 2, 5, or 10
   }
 }
 
-void mag(uint16_t *d, int factor) {  // factor should be 2, 5, or 10
+void mag(uint16_t *d, int factor, int pos) {  // factor should be 2, 5, or 10
   int s, m, n;
   long sum;
   for (int i = 0; i < SAMPLES; i++) {
-    s = (i / factor) + MAGSTART;  // start sample
+    s = (i / factor) + MAGSTART + pos;  // start sample
     m = i % factor;
     if (m == 0) {
       sum = d[s];
@@ -71,7 +71,7 @@ void mag(uint16_t *d, int factor) {  // factor should be 2, 5, or 10
       for (n = 1; n < MAGFORWD; n++) {
         sum += d[s + n] * sinc40[10 * n - m];
       }
-      sum /= 4096;
+      sum >>= 12;
     }
     if (sum > 4095) sum = 4095;
     else if (sum < 0) sum = 0;

@@ -1,10 +1,11 @@
 /*
- * ESP32 Oscilloscope using a 320x240 TFT Version 1.09
+ * ESP32 Oscilloscope using a 320x240 TFT Version 1.11
+ * for esp32 by Espressif Systems version 3.3.5
  * The max software loop sampling rates are 10ksps with 2 channels and 20ksps with a channel.
  * In the I2S DMA mode, it can be set up to 250ksps.
  * + Pulse Generator
  * + PWM DDS Function Generator (23 waveforms)
- * Copyright (c) 2023, Siliconvalley4066
+ * Copyright (c) 2023,2024,2026 Siliconvalley4066
  */
 /*
  * Arduino Oscilloscope using a graphic LCD
@@ -12,14 +13,16 @@
  * Copyright (c) 2009, Noriaki Mitsunaga
  */
 
-//#define NOLCD
+// #define NOLCD
+// #define NOWEB
 
 #ifndef NOLCD
+#include <FS.h>
 #include <SPI.h>
-#include "TFT_eSPI.h"
+#include <TFT_eSPI.h>
 TFT_eSPI display = TFT_eSPI();
 #endif
-const int numReadings = 32;
+const uint8_t numReadings = 32;
 int readings[numReadings];
 int readIndex = 0;
 float total = 0;
@@ -71,7 +74,7 @@ const long VREF[] = { 81, 83, 170, 425, 837, 1705 };  // reference voltage 3.3V 
                                                       //             2500           -> 1650 : 50mV/div
 //const int MILLIVOL_per_dot[] = {100, 50, 20, 10, 5}; // mV/dot
 //const int ac_offset[] PROGMEM = {1792, -128, -1297, -1679, -1860}; // for OLED
-const int ac_offset[] PROGMEM = { 2880, 2752, 234, -1183, -1663, -1915 };  // for Web
+const int ac_offset[] PROGMEM = { 2891, 2770, 244, -1201, -1676, -1925 };  // for Web
 const int MODE_ON = 0;
 const int MODE_INV = 1;
 const int MODE_OFF = 2;
@@ -88,14 +91,15 @@ const int TRIG_E_DN = 1;
 #define RATE_NUM 20
 #define RATE_DMA 6
 #define RATE_DUAL 8
-#define RATE_ROLL 16
+#define RATE_SLOW 9
+#define RATE_ROLL 15
 #define RATE_MAG 1
 #define ITEM_MAX 28
 const char Rates[RATE_NUM][5] PROGMEM = { "10us", "20us", "50us", "100u", "200u", "500u", " 1ms", "1.3m", " 2ms", " 5ms", "10ms", "20ms", "50ms", "100m", "200m", "0.5s", " 1s ", " 2s ", " 5s ", " 10s" };
 const unsigned long HREF[] PROGMEM = { 40, 40, 20, 40, 80, 200, 400, 500, 800, 2000, 4000, 8000, 20000, 40000, 80000, 200000, 400000, 800000, 2000000, 4000000 };
 #define RANGE_MIN 0
 #define RANGE_MAX 5
-#define VRF 5
+#define VRF 3.3
 float vavr = 0;
 float vmax = 0;
 float vmin = 0;
@@ -110,14 +114,14 @@ float v01 = 0;
 float v02 = 0;
 float v11 = 0;
 float v12 = 0;
-int rangea = 141;
-int rangeb = 141;
-int rangec = 141;
-int ranged = 141;
-int rangee = 68;
-int rangef = 19;
-int rangej = 2;
-int rangeh = 1;
+uint8_t rangea = 141;
+uint8_t rangeb = 141;
+uint8_t rangec = 141;
+uint8_t ranged = 141;
+uint8_t rangee = 68;
+uint8_t rangef = 19;
+uint8_t rangej = 2;
+uint8_t rangeh = 1;
 const char Ranges[6][5] PROGMEM = { " 2V", " 1V", "0.5V", "0.2V", "0.1V", "50mV" };
 byte range0 = RANGE_MIN;
 byte range1 = RANGE_MIN;
@@ -128,7 +132,9 @@ byte item = 0;      // Default item
 short ch0_off = 0, ch1_off = 400;
 byte data[4][SAMPLES];  // keep twice of the number of channels to make it a double buffer
 uint16_t cap_buf[NSAMP], cap_buf1[NSAMP];
+#ifndef NOWEB
 uint16_t payload[SAMPLES * 2 + 2];
+#endif
 byte odat00, odat01, odat10, odat11;  // old data buffer for erase
 byte sample = 0;                      // index for double buffer
 bool fft_mode = false, pulse_mode = false, dds_mode = false, fcount_mode = false;
@@ -137,7 +143,10 @@ bool dac_cw_mode = false;
 int trigger_ad;
 volatile bool wfft, wdds;
 #define LED_BUILTIN 22
-int brightness = 105;
+uint8_t brightness = 105;
+byte time_mag = 1;  // magnify timebase: 1, 2, 5 or 10
+int trigger_pos;
+int mag_pos = 0;
 #define LEFTPIN 12   // LEFT
 #define RIGHTPIN 13  // RIGHT
 #define UPPIN 14     // UP
@@ -165,6 +174,7 @@ int brightness = 105;
 #define HIGHCOLOR TFT_CYAN
 #define OFFCOLOR TFT_DARKGREY
 #define REDCOLOR TFT_RED
+#define MAGCOLOR TFT_BLUE
 #define LED_ON HIGH
 #define LED_OFF LOW
 #define INFO_OFF 0x20
@@ -179,14 +189,16 @@ TaskHandle_t taskHandle;
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   analogWrite(LED_BUILTIN, brightness);
-  xTaskCreatePinnedToCore(setup1, "WebProcess", 4096, NULL, 1, &taskHandle, PRO_CPU_NUM);  //Core 0でタスク開始
-  pinMode(CH0DCSW, INPUT_PULLUP);                                                          // CH1 DC/AC
-  pinMode(CH1DCSW, INPUT_PULLUP);                                                          // CH2 DC/AC
-  pinMode(UPPIN, INPUT_PULLUP);                                                            // up
-  pinMode(DOWNPIN, INPUT_PULLUP);                                                          // down
-  pinMode(RIGHTPIN, INPUT_PULLUP);                                                         // right
-  pinMode(LEFTPIN, INPUT_PULLUP);                                                          // left
-  pinMode(34, ANALOG);                                                                     // Analog 34 pin for channel 0 ADC1_CHANNEL_6
+#ifndef NOWEB
+  xTaskCreatePinnedToCore(setup1, "WebProcess", 4096, NULL, 4, &taskHandle, PRO_CPU_NUM);  //Core 0でタスク開始
+#endif
+  pinMode(CH0DCSW, INPUT_PULLUP);   // CH1 DC/AC
+  pinMode(CH1DCSW, INPUT_PULLUP);   // CH2 DC/AC
+  pinMode(UPPIN, INPUT_PULLUP);     // up
+  pinMode(DOWNPIN, INPUT_PULLUP);   // down
+  pinMode(RIGHTPIN, INPUT_PULLUP);  // right
+  pinMode(LEFTPIN, INPUT_PULLUP);   // left
+  pinMode(34, ANALOG);              // Analog 34 pin for channel 0 ADC1_CHANNEL_6
   pinMode(35, ANALOG);
   pinMode(21, INPUT);  // 1/10 attenuator(Off=High-Z, Enable=Output Low)
   pinMode(17, INPUT);
@@ -214,9 +226,9 @@ void setup() {
   //  DrawGrid();
   //  DrawText();
   //  display.display();
-  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11);
-  adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11);
-  adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
+  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
+  adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_12);
+  adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_12);
   adc1_config_width(ADC_WIDTH_BIT_12);
   if (pulse_mode)
     pulse_init();  // calibration pulse output
@@ -269,51 +281,6 @@ void DrawGrid() {
   }
 }
 #endif
-#endif
-
-void DrawText() {
-#ifndef NOLCD
-  if (info_mode & INFO_OFF)
-    return;
-  if (info_mode & INFO_BIG) {
-    display.setTextSize(2);  // Big
-  } else {
-    display.setTextSize(1);  // Small
-  }
-#endif
-
-  //  if (info_mode && Start) {
-  if (info_mode & (INFO_FRQ1 | INFO_VOL1)) {
-    dataAnalize(0);
-    if (info_mode & INFO_FRQ1)
-      measure_frequency(0);
-    if (info_mode & INFO_VOL1)
-      measure_voltage(0);
-  }
-  if (info_mode & (INFO_FRQ2 | INFO_VOL2)) {
-    dataAnalize(1);
-    if (info_mode & INFO_FRQ2)
-      measure_frequency(1);
-    if (info_mode & INFO_VOL2)
-      measure_voltage(1);
-  }
-#ifndef NOLCD
-  DrawText_big();
-  if (!fft_mode)
-    draw_trig_level(GRIDCOLOR);  // draw trig_lv mark
-#endif
-}
-
-#ifndef NOLCD
-void draw_trig_level(int color) {  // draw trig_lv mark
-  int x, y;
-
-  x = XOFF + DISPLNG + 1;
-  y = YOFF + LCD_YMAX - trig_lv - 12;
-  display.drawLine(x, y, x + 8, y + 4, color);
-  display.drawLine(x + 8, y + 4, x + 8, y - 4, color);
-  display.drawLine(x + 8, y - 4, x, y, color);
-}
 
 void display_range(byte rng) {
   display.print(Ranges[rng]);
@@ -377,12 +344,12 @@ void ClearAndDrawGraph() {
       display.drawLine(XOFF + x, YOFF + LCD_YMAX - *p5++, XOFF + x + 1, YOFF + LCD_YMAX - *p6++, BGCOLOR);
       display.drawLine(XOFF + x, YOFF + LCD_YMAX - *p7++, XOFF + x + 1, YOFF + LCD_YMAX - *p8++, CH2COLOR);
     }
-    //    CheckSW();
   }
 #endif
 }
 
 void ClearAndDrawDot(int i) {
+  DrawGrid(i);
 #if 0
   for (int x=0; x<DISPLNG; x++) {
     display.drawPixel(XOFF+i, YOFF+LCD_YMAX-odat01, BGCOLOR);
@@ -392,7 +359,6 @@ void ClearAndDrawDot(int i) {
   }
 #else
   if (i < 1) {
-    DrawGrid(i);
     return;
   }
   if (ch0_mode != MODE_OFF) {
@@ -404,7 +370,6 @@ void ClearAndDrawDot(int i) {
     display.drawLine(XOFF + i - 1, YOFF + LCD_YMAX - data[1][i - 1], XOFF + i, YOFF + LCD_YMAX - data[1][i], CH2COLOR);
   }
 #endif
-  DrawGrid(i);
 }
 #endif
 
@@ -421,29 +386,32 @@ int16_t adc_linearlize(int16_t level) {
 }
 
 void scaleDataArray(byte ad_ch, int trig_point) {
-  byte *pdata, ch_mode, range;
+  byte *pdata, ch_mode, range, ch;
   short ch_off;
   uint16_t *idata, *qdata, *rdata;
   long a, b;
-  int ch;
 
+  trigger_pos = trig_point;
   if (ad_ch == ad_ch1) {
     ch_off = ch1_off;
     ch_mode = ch1_mode;
     range = range1;
-    pdata = data[sample + 1];
     idata = &cap_buf1[trig_point];
+#ifndef NOWEB
     qdata = rdata = payload + SAMPLES;
+#endif
     ch = 1;
   } else {
     ch_off = ch0_off;
     ch_mode = ch0_mode;
     range = range0;
-    pdata = data[sample + 0];
     idata = &cap_buf[trig_point];
+#ifndef NOWEB
     qdata = rdata = payload;
+#endif
     ch = 0;
   }
+  pdata = data[sample + ch];
   for (int i = 0; i < SAMPLES; i++) {
     *idata = adc_linearlize(*idata);
     a = ((*idata + ch_off) * VREF[range] + 2048) >> 12;
@@ -452,22 +420,41 @@ void scaleDataArray(byte ad_ch, int trig_point) {
     if (ch_mode == MODE_INV)
       a = LCD_YMAX - a;
     *pdata++ = (byte)a;
+#ifndef NOWEB
     b = ((*idata++ + ch_off) * VREF[range] + 101) / 201;
     if (b > 4095) b = 4095;
     else if (b < 0) b = 0;
     if (ch_mode == MODE_INV)
       b = 4095 - b;
     *qdata++ = (int16_t)b;
+#else
+    ++idata;
+#endif
   }
+  int mag_mag = time_mag;
   if (rate == 0) {
-    mag(data[sample + ch], 10);  // x10 magnification for display
+    mag_mag = 10;
+    mag_pos = 0;  // x10 magnification for display
   } else if (rate == 1) {
-    mag(data[sample + ch], 5);  // x5 magnification for display
+    mag_mag = 5;
+    mag_pos = 0;  // x5 magnification for display
   }
-  if (rate == 0) {
-    mag(rdata, 10);  // x10 magnification for WEB
-  } else if (rate == 1) {
-    mag(rdata, 5);  // x5 magnification for WEB
+  if (rate < RATE_ROLL) {
+    switch (mag_mag) {
+      case 2:
+      case 5:
+      case 10:
+        mag_pos = constrain(mag_pos, 0, SAMPLES - SAMPLES / mag_mag - 5);
+        mag(data[sample + ch], mag_mag, mag_pos);  // magnify timebase for display
+#ifndef NOWEB
+        mag(rdata, mag_mag, mag_pos);  // magnify timebase for WEB
+#endif
+        break;
+      default:
+        time_mag = 1;  // fix odd value
+        mag_pos = 0;   // reset the position
+        break;
+    }
   }
 }
 
@@ -479,17 +466,23 @@ byte adRead(byte ch, byte mode, int off, int i) {
   else if (a < 0) a = 0;
   if (mode == MODE_INV)
     a = LCD_YMAX - a;
+#ifndef NOWEB
   long b = (((long)aa + off) * VREF[ch == ad_ch0 ? range0 : range1] + 101) / 201;
   if (b > 4095) b = 4095;
   else if (b < 0) b = 0;
   if (mode == MODE_INV)
     b = 4095 - b;
+#endif
   if (ch == ad_ch1) {
     cap_buf1[i] = aa;
+#ifndef NOWEB
     payload[i + SAMPLES] = b;
+#endif
   } else {
     cap_buf[i] = aa;
+#ifndef NOWEB
     payload[i] = b;
+#endif
   }
   return a;
 }
@@ -511,6 +504,7 @@ void set_trigger_ad() {
 void loop() {
   int oad, ad;
   unsigned long auto_time;
+
   timeExec = 100;
 #ifdef NOLCD
   digitalWrite(LED_BUILTIN, LED_ON);  // GPIO2 is used for touch CS
@@ -533,18 +527,12 @@ void loop() {
         }
         oad = ad;
 
-        if (rate > RATE_DMA + 1)
+        if (rate > RATE_SLOW)
           CheckSW();  // no need for fast sampling
         if (trig_mode == TRIG_SCAN)
           break;
         if (trig_mode == TRIG_AUTO && (millis() - st) > auto_time)
           break;
-        if (rate == RATE_DMA + 1) {
-          if (trig_mode == TRIG_NORM && (millis() - st) > auto_time)
-            break;
-          if (trig_mode == TRIG_ONE && (millis() - st) > auto_time)
-            break;
-        }
       }
     }
   }
@@ -604,9 +592,11 @@ void loop() {
       odat11 = data[1][i];  // save previous data ch1
       if (ch0_mode != MODE_OFF) data[0][i] = adRead(ad_ch0, ch0_mode, ch0_off, i);
       if (ch1_mode != MODE_OFF) data[1][i] = adRead(ad_ch1, ch1_mode, ch1_off, i);
+#ifndef NOWEB
       if (ch0_mode == MODE_OFF) payload[0] = -1;
       if (ch1_mode == MODE_OFF) payload[SAMPLES] = -1;
       xTaskNotify(taskHandle, 0, eNoAction);  // notify Websocket server task
+#endif
 #ifndef NOLCD
       ClearAndDrawDot(i);
 #endif
@@ -656,11 +646,16 @@ void draw_screen() {
     ClearAndDrawGraph();
 #endif
     DrawText();
+    mag_bar();
+#ifndef NOWEB
     if (ch0_mode == MODE_OFF) payload[0] = -1;
     if (ch1_mode == MODE_OFF) payload[SAMPLES] = -1;
+#endif
   }
+#ifndef NOWEB
   xTaskNotify(taskHandle, 0, eNoAction);  // notify Websocket server task
-  delay(10);                              // wait Web task to send it (adhoc fix)
+  vTaskDelay(10);                         // wait Web task to send it (adhoc fix)
+#endif
   //  display.display();
 }
 
@@ -712,7 +707,9 @@ void measure_frequency(int ch) {
   display.print("Hz");
   if (fft_mode) return;
   TextBG(&y, x2, 6);
-  display.print(waveDuty[ch], 1);
+  float duty = waveDuty[ch];
+  if (duty > 99.9499) duty = 99.9;
+  display.print(duty, 1);
   display.print('%');
 #endif
 }
@@ -723,6 +720,9 @@ void measure_voltage(int ch) {
   byte y;
   byte yy;
   if (fft_mode) return;
+  float vavr = VRF * dataAve[ch] / 40950.0;
+  float vmax = VRF * dataMax[ch] / 4095.0;
+  float vmin = VRF * dataMin[ch] / 4095.0;
   if (info_mode & INFO_BIG) {
     x = textINFO, y = 62;  // Big
     xx = textINFO2, yy = 26;
@@ -736,9 +736,9 @@ void measure_voltage(int ch) {
       if (range0 == 0) {        // if 1/10 attenuator required
         pinMode(17, OUTPUT);    // assign attenuator controle pin to OUTPUT,
         digitalWrite(17, LOW);  // and output LOW (output 0V)
-        vavr = VRF * dataAve[ch] / 40950.0 * 1.295 - v01;
-        vmax = VRF * dataMax[ch] / 4095.0 * 1.295 - v01;
-        vmin = VRF * dataMin[ch] / 4095.0 * 1.295 - v01;
+        vavr = VRF * dataAve[ch] / 40950.0 * 0.828 - v01;
+        vmax = VRF * dataMax[ch] / 4095.0 * 0.828 - v01;
+        vmin = VRF * dataMin[ch] / 4095.0 * 0.828 - v01;
         vavr0 = vavr;
         vopt0 = vmax - vmin;
       } else {
@@ -756,9 +756,9 @@ void measure_voltage(int ch) {
       if (range0 == 0) {        // if 1/10 attenuator required
         pinMode(17, OUTPUT);    // assign attenuator controle pin to OUTPUT,
         digitalWrite(17, LOW);  // and output LOW (output 0V)
-        vavr = VRF * dataAve[ch] / 40950.0 * 1.295;
-        vmax = VRF * dataMax[ch] / 4095.0 * 1.295;
-        vmin = VRF * dataMin[ch] / 4095.0 * 1.295;
+        vavr = VRF * dataAve[ch] / 40950.0 * 1.417;
+        vmax = VRF * dataMax[ch] / 4095.0 * 1.417;
+        vmin = VRF * dataMin[ch] / 4095.0 * 1.417;
         vopt0 = vmax;
       } else {
         pinMode(17, INPUT);
@@ -779,9 +779,9 @@ void measure_voltage(int ch) {
       if (range1 == 0) {        // if 1/10 attenuator required
         pinMode(21, OUTPUT);    // assign attenuator controle pin to OUTPUT,
         digitalWrite(21, LOW);  // and output LOW (output 0V)
-        vavr = VRF * dataAve[ch] / 40950.0 * 1.304 - v11;
-        vmax = VRF * dataMax[ch] / 4095.0 * 1.304 - v11;
-        vmin = VRF * dataMin[ch] / 4095.0 * 1.304 - v11;
+        vavr = VRF * dataAve[ch] / 40950.0 * 0.834 - v11;
+        vmax = VRF * dataMax[ch] / 4095.0 * 0.834 - v11;
+        vmin = VRF * dataMin[ch] / 4095.0 * 0.834 - v11;
         vavr1 = vavr;
         vopt1 = vmax - vmin;
       } else {
@@ -803,9 +803,9 @@ void measure_voltage(int ch) {
       if (range1 == 0) {        // if 1/10 attenuator required
         pinMode(21, OUTPUT);    // assign attenuator controle pin to OUTPUT,
         digitalWrite(21, LOW);  // and output LOW (output 0V)
-        vavr = VRF * dataAve[ch] / 40950.0 * 1.304;
-        vmax = VRF * dataMax[ch] / 4095.0 * 1.304;
-        vmin = VRF * dataMin[ch] / 4095.0 * 1.304;
+        vavr = VRF * dataAve[ch] / 40950.0 * 1.431;
+        vmax = VRF * dataMax[ch] / 4095.0 * 1.431;
+        vmin = VRF * dataMin[ch] / 4095.0 * 1.431;
         vopt1 = vmax;
       } else {
         pinMode(21, INPUT);
@@ -830,7 +830,7 @@ void measure_voltage(int ch) {
     else
       display.print("DC ");
   }
-  display.print(vmax - vmin);
+  display.print((vmax - vmin) * 0.707);
   display.print('V');
   TextBG(&y, x, 8);
   display.print("max");
@@ -846,6 +846,7 @@ void measure_voltage(int ch) {
   if (vmin >= 0.0) display.print('V');
 #endif
 }
+
 void sample_dual_us(unsigned int r) {  // dual channel. r > 67
   if (ch0_mode != MODE_OFF && ch1_mode == MODE_OFF) {
     unsigned long st = micros();
@@ -922,9 +923,9 @@ void sample_200us(unsigned int r) {  // adc1_get_raw() with timing, channel 0 or
     //    esp_task_wdt_reset();
   }
   //  enableCore1WDT();
-  delay(1);
+  vTaskDelay(1);
   scaleDataArray(ad_ch, 0);
-  delay(1);
+  vTaskDelay(1);
 }
 
 void plotFFT() {
@@ -932,8 +933,12 @@ void plotFFT() {
   int ylim = 200;
 
   int clear = (sample == 0) ? 2 : 0;
+  int j = 0;
+  if (rate <= RATE_DMA) {
+    j = trigger_pos;
+  }
   for (int i = 0; i < FFT_N; i++) {
-    vReal[i] = cap_buf[i];
+    vReal[i] = cap_buf[j++];
     vImag[i] = 0.0;
   }
   FFT.dcRemoval();
@@ -942,10 +947,14 @@ void plotFFT() {
   FFT.complexToMagnitude();                               // Compute magnitudes
   newplot = data[sample];
   lastplot = data[clear];
+#ifndef NOWEB
   payload[0] = 0;
+#endif
   for (int i = 1; i < FFT_N / 2; i++) {
     float db = log10(vReal[i]);
+#ifndef NOWEB
     payload[i] = constrain((int)(1024.0 * (db - 1.6)), 0, 4095);
+#endif
 #ifndef NOLCD
     int dat = constrain((int)(50.0 * (db - 1.6)), 0, ylim);
     display.drawFastVLine(i * 2, ylim - lastplot[i], lastplot[i], BGCOLOR);  // erase old
@@ -966,9 +975,11 @@ void draw_scale() {
 #endif
   fhref = freqhref();
   nyquist = 5.0e6 / fhref;  // Nyquist frequency
+#ifndef NOWEB
   long inyquist = nyquist;
   payload[FFT_N / 2] = (short)(inyquist / 1000);
   payload[FFT_N / 2 + 1] = (short)(inyquist % 1000);
+#endif
 #ifndef NOLCD
   if (nyquist > 999.0) {
     nyquist = nyquist / 1000.0;
@@ -1007,7 +1018,7 @@ float freqhref() {
 
 #ifdef EEPROM_START
 void saveEEPROM() {  // Save the setting value in EEPROM after waiting a while after the button operation.
-  int p = EEPROM_START;
+  uint16_t p = EEPROM_START;
   if (saveTimer > 0) {                 // If the timer value is positive
     saveTimer = saveTimer - timeExec;  // Timer subtraction
     if (saveTimer <= 0) {              // if time up
@@ -1039,6 +1050,7 @@ void saveEEPROM() {  // Save the setting value in EEPROM after waiting a while a
       EEPROM.write(p++, (ifreq >> 16) & 0xff);
       EEPROM.write(p++, (ifreq >> 24) & 0xff);
       EEPROM.write(p++, dac_cw_mode);
+      EEPROM.write(p++, time_mag);
       EEPROM.commit();  // actually write EEPROM. Necessary for ESP32
     }
   }
@@ -1068,32 +1080,28 @@ void set_default() {
   wave_id = 0;    // sine wave
   ifreq = 23841;  // 238.41Hz
   dac_cw_mode = false;
+  time_mag = 1;  // magnify timebase
 }
 
 extern const byte wave_num;
 
 #ifdef EEPROM_START
 void loadEEPROM() {  // Read setting values from EEPROM (abnormal values will be corrected to default)
-  int p = EEPROM_START, error = 0;
+  uint16_t p = EEPROM_START, error = 0;
 
-  range0 = EEPROM.read(p++);  // range0
-  if ((range0 < RANGE_MIN) || (range0 > RANGE_MAX)) ++error;
+  range0 = EEPROM.read(p++);    // range0
   ch0_mode = EEPROM.read(p++);  // ch0_mode
   if (ch0_mode > 2) ++error;
   *((byte *)&ch0_off) = EEPROM.read(p++);      // ch0_off low
   *((byte *)&ch0_off + 1) = EEPROM.read(p++);  // ch0_off high
-  if ((ch0_off < -8192) || (ch0_off > 8191)) ++error;
 
-  range1 = EEPROM.read(p++);  // range1
-  if ((range1 < RANGE_MIN) || (range1 > RANGE_MAX)) ++error;
+  range1 = EEPROM.read(p++);    // range1
   ch1_mode = EEPROM.read(p++);  // ch1_mode
   if (ch1_mode > 2) ++error;
   *((byte *)&ch1_off) = EEPROM.read(p++);      // ch1_off low
   *((byte *)&ch1_off + 1) = EEPROM.read(p++);  // ch1_off high
-  if ((ch1_off < -8192) || (ch1_off > 8191)) ++error;
 
   rate = EEPROM.read(p++);  // rate
-  if ((rate < RATE_MIN) || (rate > RATE_MAX)) ++error;
   //  if (ch0_mode == MODE_OFF && rate < 5) ++error;  // correct ch0_mode
   trig_mode = EEPROM.read(p++);  // trig_mode
   if (trig_mode > TRIG_SCAN) ++error;
@@ -1115,7 +1123,7 @@ void loadEEPROM() {  // Read setting values from EEPROM (abnormal values will be
   *((byte *)&count) = EEPROM.read(p++);      // count low
   *((byte *)&count + 1) = EEPROM.read(p++);  // count high
   if (count > 256) ++error;
-  dds_mode = EEPROM.read(p++);  // DDS wave id
+  dds_mode = EEPROM.read(p++);  // DDS mode
   wave_id = EEPROM.read(p++);   // DDS wave id
   if (wave_id >= wave_num) ++error;
   *((byte *)&ifreq) = EEPROM.read(p++);      // ifreq low
@@ -1123,8 +1131,10 @@ void loadEEPROM() {  // Read setting values from EEPROM (abnormal values will be
   *((byte *)&ifreq + 2) = EEPROM.read(p++);  // ifreq
   *((byte *)&ifreq + 3) = EEPROM.read(p++);  // ifreq high
   if (ifreq > 99999L) ++error;
-  dac_cw_mode = EEPROM.read(p++);  // DDS wave id
-  if (error > 0)
+  dac_cw_mode = EEPROM.read(p++);  // DDS CW mode
+  time_mag = EEPROM.read(p++);     // magnify timebase
+  if (error > 0) {
     set_default();
+  }
 }
 #endif

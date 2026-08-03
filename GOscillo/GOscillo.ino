@@ -91,7 +91,7 @@ const int TRIG_E_DN = 1;
 #define RATE_NUM 20
 #define RATE_DMA 6
 #define RATE_DUAL 8
-#define RATE_SLOW 9
+#define RATE_SLOW 7
 #define RATE_ROLL 15
 #define RATE_MAG 1
 #define ITEM_MAX 28
@@ -533,6 +533,12 @@ void loop() {
           break;
         if (trig_mode == TRIG_AUTO && (millis() - st) > auto_time)
           break;
+if (rate == RATE_SLOW){
+          if (trig_mode == TRIG_NORM && (millis() - st) > auto_time)
+            break;
+          if (trig_mode == TRIG_ONE && (millis() - st) > auto_time)
+            break;
+        }
       }
     }
   }
